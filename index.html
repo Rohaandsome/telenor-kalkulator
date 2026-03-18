@@ -161,6 +161,15 @@
                                 <option value="Fullpris">Kjøp med fullpris i kassa</option>
                                 <option value="Ingen avtale / Kjøpt tidligere">Har telefonen fra før</option>
                             </select>
+                            <div v-if="getItemPrice(person.phoneName, person.contractType, availablePhones)" class="mt-1">
+                                <p v-if="getItemPrice(person.phoneName, person.contractType, availablePhones).type === 'monthly'" class="text-sm font-semibold text-telenor-blue">
+                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones).amount }},- /mnd
+                                    <span class="font-normal text-gray-400">({{ getItemPrice(person.phoneName, person.contractType, availablePhones).fullPrice }},- fullpris)</span>
+                                </p>
+                                <p v-else class="text-sm font-semibold text-gray-600">
+                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones).amount }},- i kassa
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Forsikring -->
@@ -172,8 +181,8 @@
                                 <input type="checkbox" v-model="person.hasInsurance" class="checkbox-style">
                                 <span class="text-sm font-medium select-none">Med forsikring</span>
                             </label>
-                            <p class="text-sm text-gray-500 mt-1" v-if="person.hasInsurance">
-                                Koster {{ calculateInsurancePrice(person.phoneName) }},- mnd
+                            <p class="text-sm font-semibold text-telenor-blue mt-1" v-if="person.hasInsurance">
+                                {{ calculateInsurancePrice(person.phoneName) }},- /mnd
                             </p>
                         </div>
                     </div>
@@ -216,6 +225,18 @@
                                     <option value="36 mnd">Splitt 36 mnd</option>
                                     <option value="Fullpris">Kjøp med fullpris i kassa</option>
                                 </select>
+                                <div v-if="getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories)" class="mt-1">
+                                    <p v-if="getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).type === 'monthly'" class="text-sm font-semibold text-telenor-blue">
+                                        {{ getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).amount }},- /mnd
+                                        <span class="font-normal text-gray-400">({{ getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).fullPrice }},- fullpris)</span>
+                                    </p>
+                                    <p v-else-if="getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).type === 'upfront-only'" class="text-sm font-semibold text-amber-600">
+                                        Kun fullpris: {{ getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).amount }},-
+                                    </p>
+                                    <p v-else class="text-sm font-semibold text-gray-600">
+                                        {{ getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories).amount }},- i kassa
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>

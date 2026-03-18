@@ -132,6 +132,24 @@ createApp({
             return Math.round(total * 100) / 100;
         });
 
+        const getItemPrice = (itemName, contractType, list) => {
+            if (!itemName) return null;
+            const item = list.find(i => i.name === itemName);
+            if (!item) return null;
+
+            if (contractType === 'Fullpris') {
+                return { amount: item.fullPrice, type: 'upfront' };
+            }
+            if (contractType === 'Ingen avtale / Kjøpt tidligere') {
+                return null;
+            }
+            if (item.noInstallment) {
+                return { amount: item.fullPrice, type: 'upfront-only' };
+            }
+            const months = contractType === '24 mnd' ? 24 : 36;
+            return { amount: getMonthlyPrice(item.fullPrice, months), type: 'monthly', fullPrice: item.fullPrice };
+        };
+
         return {
             persons,
             availablePhones,
@@ -144,7 +162,8 @@ createApp({
             personTotalMonthly,
             totalUpfront,
             grandTotalMonthly,
-            calculateInsurancePrice
+            calculateInsurancePrice,
+            getItemPrice
         };
     }
 }).mount('#app');
