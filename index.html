@@ -85,6 +85,11 @@
             opacity: 0;
             transform: translateY(15px);
         }
+
+        /* Skjuler ukompilert Vue-template til appen har montert */
+        [v-cloak] {
+            display: none !important;
+        }
     </style>
 </head>
 
@@ -92,7 +97,7 @@
     <!-- Importerer data og logikk -->
     <script src="data.js"></script>
 
-    <div id="app">
+    <div id="app" v-cloak>
         <!-- Header -->
         <header class="header-bg text-white shadow-md">
             <div class="max-w-6xl mx-auto px-4 py-8 md:py-12">
@@ -155,19 +160,26 @@
                         <!-- Avbetaling Type -->
                         <div class="space-y-2" v-if="person.phoneName">
                             <label class="block text-sm font-medium text-gray-700">Type Avtale</label>
-                            <select v-model="person.contractType" class="input-style">
+                            <select v-model="person.contractType" @change="person.contractType !== '24 mnd' && person.contractType !== '36 mnd' && (person.tradeInValue = 0)" class="input-style">
                                 <option value="24 mnd">Plussavtale / Splitt 24 mnd</option>
                                 <option value="36 mnd">Plussavtale / Splitt 36 mnd</option>
                                 <option value="Fullpris">Kjøp med fullpris i kassa</option>
                                 <option value="Ingen avtale / Kjøpt tidligere">Har telefonen fra før</option>
                             </select>
-                            <div v-if="getItemPrice(person.phoneName, person.contractType, availablePhones)" class="mt-1">
-                                <p v-if="getItemPrice(person.phoneName, person.contractType, availablePhones).type === 'monthly'" class="text-sm font-semibold text-telenor-blue">
-                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones).amount }},- /mnd
-                                    <span class="font-normal text-gray-400">({{ getItemPrice(person.phoneName, person.contractType, availablePhones).fullPrice }},- fullpris)</span>
+                            <div v-if="(person.contractType === '24 mnd' || person.contractType === '36 mnd')" class="mt-2">
+                                <label class="block text-sm font-medium text-gray-600">Innbytteverdi (valgfritt)</label>
+                                <input type="number" v-model.number="person.tradeInValue" min="0" placeholder="0"
+                                    class="input-style">
+                            </div>
+                            <div v-if="getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue)" class="mt-1">
+                                <p v-if="getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue).type === 'monthly'" class="text-sm font-semibold text-telenor-blue">
+                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue).amount }},- /mnd
+                                    <span class="font-normal text-gray-400">(fullpris {{ getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue).fullPrice }},-</span>
+                                    <span v-if="person.tradeInValue > 0" class="font-normal text-gray-400"> → {{ getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue).effectivePrice }},- etter innbytte)</span>
+                                    <span v-else class="font-normal text-gray-400">)</span>
                                 </p>
                                 <p v-else class="text-sm font-semibold text-gray-600">
-                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones).amount }},- i kassa
+                                    {{ getItemPrice(person.phoneName, person.contractType, availablePhones, person.tradeInValue).amount }},- i kassa
                                 </p>
                             </div>
                         </div>
@@ -261,6 +273,16 @@
                 Legg til familiemedlem
             </button>
 
+            <button @click="showCopyableSummary"
+                class="flex items-center gap-2 text-gray-600 font-medium px-6 py-3 rounded-xl border border-gray-300 hover:border-telenor-blue hover:text-telenor-blue hover:bg-blue-50 transition-all w-full justify-center mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Kopier tilbud til utklippstavle
+            </button>
+
         </main>
 
         <!-- Sticky Total Footer -->
@@ -295,6 +317,37 @@
                     </svg>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- Modal: Kopierbar tilbudstekst (skjult som standard fordi nettleseren ignorerer v-if før Vue monteres) -->
+        <div v-if="copyableSummaryVisible" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" style="display: none" :style="copyableSummaryVisible ? { display: 'flex' } : {}"
+            @click.self="closeCopyableSummary">
+            <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-800">Tilbud som tekst – kopier med Ctrl+A, Ctrl+C</h3>
+                    <button @click="closeCopyableSummary" class="text-gray-500 hover:text-gray-700 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4 flex-1 overflow-auto">
+                    <textarea readonly v-model="copyableSummaryText"
+                        class="w-full h-64 p-4 font-mono text-sm border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-telenor-blue focus:border-transparent"
+                        @click="$event.target.select()"></textarea>
+                </div>
+                <div class="p-4 border-t flex gap-2">
+                    <button @click="copyToClipboard"
+                        class="flex-1 px-4 py-2 rounded-lg bg-telenor-blue text-white font-medium hover:bg-telenor-dark transition-colors">
+                        Kopier til utklippstavle
+                    </button>
+                    <button @click="closeCopyableSummary"
+                        class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors">
+                        Lukk
+                    </button>
+                </div>
             </div>
         </div>
     </div>

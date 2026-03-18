@@ -17,7 +17,7 @@ const calculateInsurancePrice = (phoneName) => {
 createApp({
     setup() {
         const persons = ref([
-            { id: Date.now(), planId: 'Sikre', phoneName: '', contractType: '24 mnd', hasInsurance: false, showAccessory: false, accessoryName: '', accessoryContractType: '24 mnd' }
+            { id: Date.now(), planId: 'Sikre', phoneName: '', contractType: '24 mnd', hasInsurance: false, tradeInValue: 0, showAccessory: false, accessoryName: '', accessoryContractType: '24 mnd' }
         ]);
 
         const availablePhones = ref(mobileData.sort((a, b) => a.name.localeCompare(b.name)));
@@ -31,6 +31,7 @@ createApp({
                 phoneName: '',
                 contractType: '24 mnd',
                 hasInsurance: false,
+                tradeInValue: 0,
                 showAccessory: false,
                 accessoryName: '',
                 accessoryContractType: '24 mnd'
@@ -47,6 +48,12 @@ createApp({
             person.showAccessory = !person.showAccessory;
             if (!person.showAccessory) {
                 person.accessoryName = '';
+            }
+        };
+
+        const onContractTypeChange = (person) => {
+            if (person.contractType !== '24 mnd' && person.contractType !== '36 mnd') {
+                person.tradeInValue = 0;
             }
         };
 
@@ -106,7 +113,8 @@ createApp({
                     const phone = availablePhones.value.find(p => p.name === person.phoneName);
                     if (phone) {
                         const months = person.contractType === '24 mnd' ? 24 : 36;
-                        monthly += getMonthlyPrice(phone.fullPrice, months);
+                        const effectivePrice = Math.max(0, phone.fullPrice - (person.tradeInValue || 0));
+                        monthly += getMonthlyPrice(effectivePrice, months);
                     }
                 }
 
@@ -132,7 +140,7 @@ createApp({
             return Math.round(total * 100) / 100;
         });
 
-        const getItemPrice = (itemName, contractType, list) => {
+        const getItemPrice = (itemName, contractType, list, tradeIn = 0) => {
             if (!itemName) return null;
             const item = list.find(i => i.name === itemName);
             if (!item) return null;
@@ -147,7 +155,86 @@ createApp({
                 return { amount: item.fullPrice, type: 'upfront-only' };
             }
             const months = contractType === '24 mnd' ? 24 : 36;
-            return { amount: getMonthlyPrice(item.fullPrice, months), type: 'monthly', fullPrice: item.fullPrice };
+            const effectivePrice = Math.max(0, item.fullPrice - (tradeIn || 0));
+            return { amount: getMonthlyPrice(effectivePrice, months), type: 'monthly', fullPrice: item.fullPrice, effectivePrice };
+        };
+
+        const copyableSummaryVisible = ref(false);
+        const copyableSummaryText = ref('');
+
+        const showCopyableSummary = () => {
+            const customerName = window.prompt('Kundens navn:');
+            if (customerName === null) return;
+
+            const lines = [];
+            lines.push('TELENOR TILBUD – Telenorbutikken Asker');
+            lines.push('Kunde: ' + (customerName.trim() || '(ikke oppgitt)'));
+            lines.push('');
+            lines.push('─'.repeat(50));
+
+            persons.value.forEach((person, idx) => {
+                lines.push('');
+                lines.push(`Person ${idx + 1}:`);
+                const plan = plans.value[person.planId];
+                if (plan) {
+                    lines.push(`  Abonnement: ${plan.name} – ${personPlanCosts.value[person.id]},- /mnd`);
+                }
+                if (person.phoneName) {
+                    const phone = availablePhones.value.find(p => p.name === person.phoneName);
+                    if (phone) {
+                        if (person.contractType === '24 mnd' || person.contractType === '36 mnd') {
+                            const tradeIn = Number(person.tradeInValue) || 0;
+                            const effective = Math.max(0, phone.fullPrice - tradeIn);
+                            const monthly = getMonthlyPrice(effective, person.contractType === '24 mnd' ? 24 : 36);
+                            let phoneLine = `  Mobil: ${person.phoneName} – ${monthly},- /mnd (${person.contractType})`;
+                            if (tradeIn > 0) {
+                                phoneLine += ` (fullpris ${phone.fullPrice},- minus innbytte ${tradeIn},-)`;
+                            }
+                            lines.push(phoneLine);
+                        } else if (person.contractType === 'Fullpris') {
+                            lines.push(`  Mobil: ${person.phoneName} – ${phone.fullPrice},- engangsbeløp`);
+                        } else {
+                            lines.push(`  Mobil: ${person.phoneName} (har fra før)`);
+                        }
+                    }
+                    if (person.hasInsurance) {
+                        lines.push(`  Forsikring: ${calculateInsurancePrice(person.phoneName)},- /mnd`);
+                    }
+                }
+                if (person.showAccessory && person.accessoryName) {
+                    const acc = availableAccessories.value.find(a => a.name === person.accessoryName);
+                    if (acc) {
+                        const priceInfo = getItemPrice(person.accessoryName, person.accessoryContractType, availableAccessories.value);
+                        if (priceInfo?.type === 'monthly') {
+                            lines.push(`  Tilbehør: ${person.accessoryName} – ${priceInfo.amount},- /mnd (${person.accessoryContractType})`);
+                        } else if (priceInfo?.type === 'upfront' || priceInfo?.type === 'upfront-only') {
+                            lines.push(`  Tilbehør: ${person.accessoryName} – ${acc.fullPrice},- engangsbeløp`);
+                        }
+                    }
+                }
+                lines.push(`  Månedspris: ${personTotalMonthly.value[person.id]},-`);
+            });
+
+            lines.push('');
+            lines.push('─'.repeat(50));
+            lines.push(`Total månedspris: ${grandTotalMonthly.value},- /mnd`);
+            if (totalUpfront.value > 0) {
+                lines.push(`Engangsbeløp i kassa: ${totalUpfront.value},-`);
+            }
+            lines.push('');
+
+            copyableSummaryText.value = lines.join('\n');
+            copyableSummaryVisible.value = true;
+        };
+
+        const copyToClipboard = () => {
+            navigator.clipboard.writeText(copyableSummaryText.value).then(() => {
+                copyableSummaryVisible.value = false;
+            }).catch(() => {});
+        };
+
+        const closeCopyableSummary = () => {
+            copyableSummaryVisible.value = false;
         };
 
         return {
@@ -163,7 +250,12 @@ createApp({
             totalUpfront,
             grandTotalMonthly,
             calculateInsurancePrice,
-            getItemPrice
+            getItemPrice,
+            showCopyableSummary,
+            copyableSummaryVisible,
+            copyableSummaryText,
+            copyToClipboard,
+            closeCopyableSummary
         };
     }
 }).mount('#app');
